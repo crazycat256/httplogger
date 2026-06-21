@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const DEFAULT_MITM_PROXY_PORT: u16 = 8079;
-pub const CONFIG_FILE: &str = "config.yml";
+pub const CONFIG_FILE: &str = "httplogger.yml";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -172,7 +172,7 @@ pub fn config_path(workspace_root: &Path) -> PathBuf {
     workspace_root.join(CONFIG_FILE)
 }
 
-/// Write the default config.yml. Refuses to overwrite unless `force` is true.
+/// Write the default httplogger.yml. Refuses to overwrite unless `force` is true.
 pub fn init_config(workspace_root: &Path, force: bool) -> Result<PathBuf> {
     let path = config_path(workspace_root);
     if path.exists() && !force {
@@ -187,7 +187,7 @@ pub fn init_config(workspace_root: &Path, force: bool) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// Load config.yml, creating it with defaults when missing.
+/// Load httplogger.yml, creating it with defaults when missing.
 pub fn load_or_init(workspace_root: &Path) -> Result<AppConfig> {
     let path = config_path(workspace_root);
     if !path.exists() {
@@ -200,5 +200,5 @@ pub fn load_or_init(workspace_root: &Path) -> Result<AppConfig> {
 }
 
 fn parse_config(raw: &str) -> Result<AppConfig> {
-    serde_yaml::from_str(raw).context("invalid config.yml")
+    serde_yaml::from_str(raw).context("invalid httplogger.yml")
 }

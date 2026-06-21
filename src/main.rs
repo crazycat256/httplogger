@@ -30,7 +30,7 @@ fn usage() -> &'static str {
     "usage: httplogger <command>
 
 commands:
-  init              create config.yml, CA, and browser home
+  init              create httplogger.yml, CA, and browser home
   proxy [--key PATH]  start MITM proxy (Ctrl+C to stop)
   launch [--key PATH] [NAME|PATH] [--] [browser args...]  start proxy and browser
 

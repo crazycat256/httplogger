@@ -15,7 +15,7 @@ https://github.com/user-attachments/assets/ad0b6f96-381a-42aa-8666-74d7da38216b
 ```bash
 cargo build --release
 
-# Create config.yml, CA, and browser home/
+# Create httplogger.yml, CA, and browser home/
 httplogger init
 
 # Start proxy + browser
@@ -25,7 +25,7 @@ httplogger launch
 httplogger proxy
 ```
 
-On first run, missing files are created automatically (`config.yml`, `ca-key.pem`, `ca.pem`, `home/`).
+On first run, missing files are created automatically (`httplogger.yml`, `ca-key.pem`, `ca.pem`, `home/`).
 
 ## Commands
 
@@ -35,7 +35,7 @@ httplogger proxy [--key PATH]
 httplogger launch [--key PATH] [NAME|PATH] [--] [browser args...]
 ```
 
-- **`init`** — write default `config.yml`, generate the CA, set up browser trust stores under `home/`.
+- **`init`** — write default `httplogger.yml`, generate the CA, set up browser trust stores under `home/`.
 - **`proxy`** — start the MITM proxy; print example launch commands for installed browsers.
 - **`launch`** — start the proxy and open a browser. Optional browser name or path; extra browser flags only after `--`.
 
