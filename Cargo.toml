@@ -1,0 +1,31 @@
+[package]
+name = "httplogger"
+version = "1.0.0"
+edition = "2024"
+description = "MITM HTTP request logger"
+license = "MIT"
+authors = ["crazycat256"]
+keywords = ["http", "proxy", "mitm", "logging", "pentest"]
+categories = ["command-line-utilities", "web-programming"]
+
+[[bin]]
+name = "httplogger"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+brotli = "8"
+chrono = { version = "0.4", features = ["serde"] }
+flate2 = "1"
+hudsucker = { version = "0.24", features = ["decoder", "http2", "rcgen-ca", "rustls-client"] }
+http-body-util = "0.1"
+hyper = "1"
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = { package = "yaml_serde", version = "0.10" }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
