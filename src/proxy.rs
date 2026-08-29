@@ -2,24 +2,26 @@ use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-use hudsucker::{
-    hyper::{Method, Request, Response},
-    Body, HttpContext, HttpHandler, RequestOrResponse, WebSocketContext, WebSocketHandler,
-};
-use hudsucker::tokio_tungstenite::tungstenite::Message;
 use http_body_util::BodyExt;
+use hudsucker::tokio_tungstenite::tungstenite::Message;
+use hudsucker::{
+    Body, HttpContext, HttpHandler, RequestOrResponse, WebSocketContext, WebSocketHandler,
+    hyper::{Method, Request, Response},
+};
 use tracing::{error, info, warn};
 
 use crate::config::AppConfig;
-use crate::filter::{matches_http_request_scope, should_filter_http_request, HttpRequestFilterInput};
+use crate::filter::{
+    HttpRequestFilterInput, matches_http_request_scope, should_filter_http_request,
+};
 use crate::http_raw::{
     header_value, infer_resource_type, is_browser_internal_request, page_url_from_request,
     parse_header_value, parse_response_status, request_url_from_message, resolve_request_url,
     serialize_request, serialize_response, split_headers_and_body,
 };
-use crate::storage::{now_iso, RequestStore};
+use crate::storage::{RequestStore, now_iso};
 use crate::websocket::{
-    direction_from_context, record_message, session_key, ws_session_key, WebSocketSessionRegistry,
+    WebSocketSessionRegistry, direction_from_context, record_message, session_key, ws_session_key,
 };
 
 const MAX_CAPTURE_BODY_BYTES: usize = 8 * 1024 * 1024;
@@ -102,11 +104,7 @@ impl CaptureHandler {
 }
 
 impl HttpHandler for CaptureHandler {
-    async fn handle_request(
-        &mut self,
-        ctx: &HttpContext,
-        req: Request<Body>,
-    ) -> RequestOrResponse {
+    async fn handle_request(&mut self, ctx: &HttpContext, req: Request<Body>) -> RequestOrResponse {
         if req.method() == Method::CONNECT {
             return req.into();
         }
@@ -193,11 +191,7 @@ impl HttpHandler for CaptureHandler {
         Request::from_parts(parts, Body::from(body_bytes)).into()
     }
 
-    async fn handle_response(
-        &mut self,
-        ctx: &HttpContext,
-        res: Response<Body>,
-    ) -> Response<Body> {
+    async fn handle_response(&mut self, ctx: &HttpContext, res: Response<Body>) -> Response<Body> {
         let Some(entry) = self.pop_entry(ctx.client_addr) else {
             return res;
         };
@@ -225,8 +219,8 @@ impl HttpHandler for CaptureHandler {
         let mime_type = parse_header_value(&response_raw, "content-type")
             .map(|v| v.split(';').next().unwrap_or("").trim().to_string())
             .filter(|v| !v.is_empty());
-        let has_response_body = split_headers_and_body(&response_raw)
-            .is_some_and(|split| !split.body_raw.is_empty());
+        let has_response_body =
+            split_headers_and_body(&response_raw).is_some_and(|split| !split.body_raw.is_empty());
 
         if should_filter_http_request(
             &Self::filter_input(
@@ -275,11 +269,8 @@ impl CaptureHandler {
         ctx: &HttpContext,
         req: Request<Body>,
     ) -> RequestOrResponse {
-        let is_ssl = matches!(
-            req.uri().scheme_str(),
-            Some("https") | Some("wss")
-        ) || header_value(req.headers(), ":scheme")
-            .is_some_and(|v| v == "https" || v == "wss");
+        let is_ssl = matches!(req.uri().scheme_str(), Some("https") | Some("wss"))
+            || header_value(req.headers(), ":scheme").is_some_and(|v| v == "https" || v == "wss");
 
         let url = match request_url_from_message(&req, is_ssl) {
             Some(url) => url,
@@ -342,15 +333,16 @@ impl WebSocketHandler for CaptureHandler {
         };
 
         let direction = direction_from_context(ctx);
-        match record_message(&recorder, direction, &message) { Err(err) => {
-            error!(%err, id = recorder.id(), "failed to record websocket message");
-        } _ => if matches!(message, Message::Text(_) | Message::Binary(_)) {
-            info!(
-                id = recorder.id(),
-                direction,
-                "stored websocket message"
-            );
-        }}
+        match record_message(&recorder, direction, &message) {
+            Err(err) => {
+                error!(%err, id = recorder.id(), "failed to record websocket message");
+            }
+            _ => {
+                if matches!(message, Message::Text(_) | Message::Binary(_)) {
+                    info!(id = recorder.id(), direction, "stored websocket message");
+                }
+            }
+        }
 
         if matches!(message, Message::Close(_)) {
             self.ws_sessions.close_session(key);

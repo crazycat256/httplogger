@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use brotli::Decompressor;
 use flate2::read::{DeflateDecoder, GzDecoder};
-use hudsucker::hyper::{header::HeaderMap, Request, Response, Uri, Version};
 use hudsucker::Body;
+use hudsucker::hyper::{Request, Response, Uri, Version, header::HeaderMap};
 use std::io::Read;
 use url::Url;
 
@@ -172,12 +172,19 @@ pub fn parse_content_encoding(headers_raw: &[u8]) -> Option<String> {
 }
 
 pub fn decompress_body(body: &[u8], encoding: &str) -> Result<Vec<u8>> {
-    let primary = encoding.split(',').next().unwrap_or("").trim().to_lowercase();
+    let primary = encoding
+        .split(',')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_lowercase();
     match primary.as_str() {
         "gzip" | "x-gzip" => {
             let mut decoder = GzDecoder::new(body);
             let mut out = Vec::new();
-            decoder.read_to_end(&mut out).context("gzip decompress failed")?;
+            decoder
+                .read_to_end(&mut out)
+                .context("gzip decompress failed")?;
             Ok(out)
         }
         "deflate" => {
@@ -209,7 +216,7 @@ pub fn prepare_message_for_disk(raw: &[u8]) -> Vec<u8> {
     };
 
     let Some(encoding) = parse_content_encoding(split.headers_raw) else {
-return raw.to_vec();
+        return raw.to_vec();
     };
 
     match decompress_body(split.body_raw, &encoding) {
@@ -284,7 +291,9 @@ pub fn serialize_request(req: &Request<Body>, body: &[u8]) -> Vec<u8> {
     let target = req.uri().to_string();
     let version = http_version_string(req.version());
     let header_block = serialize_raw_headers(req.headers());
-    let mut out = latin1_bytes(&format!("{method} {target} HTTP/{version}\r\n{header_block}\r\n\r\n"));
+    let mut out = latin1_bytes(&format!(
+        "{method} {target} HTTP/{version}\r\n{header_block}\r\n\r\n"
+    ));
     out.extend_from_slice(body);
     out
 }
@@ -342,7 +351,13 @@ pub fn request_url_from_message(req: &Request<Body>, is_ssl: bool) -> Option<Str
         .scheme_str()
         .map(str::to_string)
         .or_else(|| header_value(req.headers(), ":scheme"))
-        .unwrap_or_else(|| if is_ssl { "https".into() } else { "http".into() });
+        .unwrap_or_else(|| {
+            if is_ssl {
+                "https".into()
+            } else {
+                "http".into()
+            }
+        });
     Some(absolute_http_url(&target, &host, &scheme))
 }
 
@@ -364,10 +379,10 @@ pub fn page_url_from_request(req: &Request<Body>) -> Option<String> {
 /// Browser-internal traffic: sync/telemetry (sec-fetch) or requests from UI
 /// pages that are not real web origins (chrome://, chrome-untrusted://, …).
 pub fn is_browser_internal_request(req: &Request<Body>) -> bool {
-    if header_value(req.headers(), "sec-fetch-site").is_some_and(|site| {
-        site.eq_ignore_ascii_case("none")
-    }) && header_value(req.headers(), "sec-fetch-dest")
-        .is_some_and(|dest| dest.eq_ignore_ascii_case("empty"))
+    if header_value(req.headers(), "sec-fetch-site")
+        .is_some_and(|site| site.eq_ignore_ascii_case("none"))
+        && header_value(req.headers(), "sec-fetch-dest")
+            .is_some_and(|dest| dest.eq_ignore_ascii_case("empty"))
     {
         return true;
     }

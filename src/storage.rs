@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -68,8 +68,8 @@ impl RequestStore {
         status_code: Option<u16>,
         mime_type: Option<&str>,
     ) -> Result<i64> {
-        let page_origin = extract_origin_from_url(page_url)
-            .or_else(|| extract_origin_from_url(Some(url)));
+        let page_origin =
+            extract_origin_from_url(page_url).or_else(|| extract_origin_from_url(Some(url)));
         let page_origin = page_origin.context("missing page origin")?;
 
         let id = {
@@ -189,8 +189,8 @@ impl RequestStore {
         page_url: Option<&str>,
         opened_at: &str,
     ) -> Result<Arc<WebSocketRecorder>> {
-        let page_origin = extract_origin_from_url(page_url)
-            .or_else(|| extract_origin_from_url(Some(url)));
+        let page_origin =
+            extract_origin_from_url(page_url).or_else(|| extract_origin_from_url(Some(url)));
 
         let id = {
             let conn = self.db.lock().expect("db mutex poisoned");
@@ -262,10 +262,7 @@ impl WebSocketRecorder {
         &self.relative_path
     }
 
-    pub fn push_message(
-        &self,
-        message: crate::websocket::WebSocketMessageRecord,
-    ) -> Result<()> {
+    pub fn push_message(&self, message: crate::websocket::WebSocketMessageRecord) -> Result<()> {
         self.messages
             .lock()
             .expect("ws messages mutex poisoned")

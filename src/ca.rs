@@ -1,7 +1,5 @@
-use anyhow::{bail, Context, Result};
-use hudsucker::rcgen::{
-    BasicConstraints, CertificateParams, DnType, IsCa, Issuer, KeyPair,
-};
+use anyhow::{Context, Result, bail};
+use hudsucker::rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, Issuer, KeyPair};
 use std::fs;
 use std::path::{Path, PathBuf};
 

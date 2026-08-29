@@ -3,12 +3,15 @@ mod ca;
 mod config;
 mod filter;
 mod http_raw;
+mod peek;
 mod proxy;
 mod server;
 mod storage;
+mod tls_hello;
+mod tls_mimic;
 mod websocket;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::env;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -17,8 +20,12 @@ use tracing::{error, info};
 
 enum Command {
     Help,
-    Init { force: bool },
-    Proxy { key_path: Option<PathBuf> },
+    Init {
+        force: bool,
+    },
+    Proxy {
+        key_path: Option<PathBuf>,
+    },
     Launch {
         key_path: Option<PathBuf>,
         browser: Option<String>,
@@ -53,7 +60,10 @@ fn wants_help(args: &[String]) -> bool {
 }
 
 fn help_target(args: &[String]) -> bool {
-    let end = args.iter().position(|arg| arg == "--").unwrap_or(args.len());
+    let end = args
+        .iter()
+        .position(|arg| arg == "--")
+        .unwrap_or(args.len());
     wants_help(&args[..end])
 }
 
@@ -106,8 +116,12 @@ fn parse_command() -> Result<Command> {
         }
         Some("proxy") => {
             args.remove(0);
-            let key_path = take_flag(&mut args, &["--key"], "a path to the CA private key PEM file")?
-                .map(PathBuf::from);
+            let key_path = take_flag(
+                &mut args,
+                &["--key"],
+                "a path to the CA private key PEM file",
+            )?
+            .map(PathBuf::from);
             if !args.is_empty() {
                 bail!("usage: httplogger proxy [--key <ca-key.pem>]");
             }
@@ -222,6 +236,7 @@ async fn run_proxy_only(key_path: Option<PathBuf>) -> Result<()> {
         &session.root,
         session.config,
         session.ca,
+        crate::tls_mimic::FingerprintStore::new(),
         async {
             tokio::signal::ctrl_c()
                 .await
@@ -288,6 +303,7 @@ async fn run_launch(
         &session.root,
         session.config,
         session.ca,
+        crate::tls_mimic::FingerprintStore::new(),
         async move {
             tokio::select! {
                 _ = tokio::signal::ctrl_c() => {

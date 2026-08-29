@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::env;
 use std::ffi::OsStr;
 use std::io::IsTerminal;
@@ -34,13 +34,7 @@ const CHROMIUM_FAMILY: &[&str] = &[
     "microsoft-edge-stable",
     "vivaldi-stable",
 ];
-const FIREFOX_FAMILY: &[&str] = &[
-    "firefox",
-    "firefox-esr",
-    "librewolf",
-    "waterfox",
-    "floorp",
-];
+const FIREFOX_FAMILY: &[&str] = &["firefox", "firefox-esr", "librewolf", "waterfox", "floorp"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BrowserKind {
@@ -115,7 +109,11 @@ pub fn print_proxy_usage(
     println!();
     println!(
         "{}",
-        paint(color, "\x1b[1;32m", &format!("MITM proxy listening on {proxy}"))
+        paint(
+            color,
+            "\x1b[1;32m",
+            &format!("MITM proxy listening on {proxy}")
+        )
     );
     println!();
 
@@ -281,9 +279,9 @@ fn link_local_share_entries(ssl_home: &Path, real_share: &Path) -> Result<()> {
         return Ok(());
     }
 
-    for entry in std::fs::read_dir(real_share).with_context(|| {
-        format!("failed to read {}", real_share.display())
-    })? {
+    for entry in std::fs::read_dir(real_share)
+        .with_context(|| format!("failed to read {}", real_share.display()))?
+    {
         let entry = entry?;
         let name = entry.file_name();
         if name == "pki" {
@@ -386,9 +384,7 @@ fn resolve_default_webbrowser() -> Result<BrowserSelection> {
     }
 
     if let Some(desktop) = os_default_browser_desktop() {
-        let name = desktop
-            .strip_suffix(".desktop")
-            .unwrap_or(desktop.as_str());
+        let name = desktop.strip_suffix(".desktop").unwrap_or(desktop.as_str());
         if let Some(path) = which(name) {
             candidates.insert(0, path);
         }
@@ -408,13 +404,14 @@ fn resolve_default_webbrowser() -> Result<BrowserSelection> {
         }
         seen.push(path.clone());
         if let Some(kind) = classify_executable(&path) {
-            return Ok(BrowserSelection { kind, executable: path });
+            return Ok(BrowserSelection {
+                kind,
+                executable: path,
+            });
         }
     }
 
-    bail!(
-        "no supported browser found (install chromium or firefox, or pass NAME|PATH to launch)"
-    )
+    bail!("no supported browser found (install chromium or firefox, or pass NAME|PATH to launch)")
 }
 
 fn os_default_browser_desktop() -> Option<String> {
@@ -447,10 +444,7 @@ fn find_family_executable(family: &[&str]) -> Option<PathBuf> {
 }
 
 fn classify_executable(path: &Path) -> Option<BrowserKind> {
-    let base = path
-        .file_name()
-        .and_then(OsStr::to_str)?
-        .to_lowercase();
+    let base = path.file_name().and_then(OsStr::to_str)?.to_lowercase();
 
     if is_firefox_like(&base) {
         Some(BrowserKind::Firefox)
@@ -516,11 +510,7 @@ fn setup_firefox_profile(home: &Path, ca_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn write_firefox_user_js(
-    profile: &Path,
-    proxy_port: u16,
-    user_agent: Option<&str>,
-) -> Result<()> {
+fn write_firefox_user_js(profile: &Path, proxy_port: u16, user_agent: Option<&str>) -> Result<()> {
     strip_firstrun_prefs_from_prefs_js(profile)?;
 
     let now_ms = std::time::SystemTime::now()

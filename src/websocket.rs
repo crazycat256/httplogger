@@ -1,11 +1,11 @@
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use hudsucker::tokio_tungstenite::tungstenite::Message;
 use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use url::Url;
 
-use crate::storage::{now_iso, WebSocketRecorder};
+use crate::storage::{WebSocketRecorder, now_iso};
 
 pub fn direction_from_context(ctx: &hudsucker::WebSocketContext) -> &'static str {
     match ctx {
@@ -122,9 +122,15 @@ pub fn encode_message(message: &Message) -> WebSocketMessagePayload {
 pub fn serialize_capture_file(capture: &WebSocketCaptureFile) -> Result<String, serde_json::Error> {
     let mut out = String::from("{\n");
     out.push_str(&format!("  \"id\": {},\n", capture.id));
-    out.push_str(&format!("  \"url\": {},\n", serde_json::to_string(&capture.url)?));
+    out.push_str(&format!(
+        "  \"url\": {},\n",
+        serde_json::to_string(&capture.url)?
+    ));
     if let Some(page_url) = &capture.page_url {
-        out.push_str(&format!("  \"pageUrl\": {},\n", serde_json::to_string(page_url)?));
+        out.push_str(&format!(
+            "  \"pageUrl\": {},\n",
+            serde_json::to_string(page_url)?
+        ));
     }
     out.push_str(&format!(
         "  \"openedAt\": {},\n",
@@ -164,8 +170,14 @@ pub fn record_message(
 }
 
 pub struct WebSocketSessionRegistry {
-    pending: Mutex<std::collections::HashMap<(std::net::SocketAddr, String), std::collections::VecDeque<Arc<WebSocketRecorder>>>>,
-    active: Mutex<std::collections::HashMap<(std::net::SocketAddr, String), Arc<WebSocketRecorder>>>,
+    pending: Mutex<
+        std::collections::HashMap<
+            (std::net::SocketAddr, String),
+            std::collections::VecDeque<Arc<WebSocketRecorder>>,
+        >,
+    >,
+    active:
+        Mutex<std::collections::HashMap<(std::net::SocketAddr, String), Arc<WebSocketRecorder>>>,
 }
 
 impl WebSocketSessionRegistry {
@@ -208,6 +220,9 @@ impl WebSocketSessionRegistry {
     }
 
     pub fn close_session(&self, key: (std::net::SocketAddr, String)) {
-        self.active.lock().expect("ws active mutex poisoned").remove(&key);
+        self.active
+            .lock()
+            .expect("ws active mutex poisoned")
+            .remove(&key);
     }
 }

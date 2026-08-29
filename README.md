@@ -1,12 +1,13 @@
 # httplogger
 
-MITM HTTP and WebSocket logger for security testing. Runs a local TLS-intercepting proxy, records matching traffic to disk, and can launch a browser preconfigured to trust the generated CA.
+MITM HTTP and WebSocket logger for security testing. Runs a local TLS-intercepting proxy, records matching traffic to disk, and can launch a browser preconfigured to trust the generated CA. Upstream HTTPS and WSS replay the browser's TLS fingerprint so the origin sees that client, not rustls.
 
 https://github.com/user-attachments/assets/ad0b6f96-381a-42aa-8666-74d7da38216b
 
 ## Requirements
 
 - Rust
+- `cmake`, a C/C++ compiler, and `perl` (BoringSSL, pulled in at build time)
 - A Chromium- or Firefox-based browser (for `launch`)
 - `certutil` (NSS tools) to install the CA into the isolated browser profile
 

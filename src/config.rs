@@ -194,8 +194,8 @@ pub fn load_or_init(workspace_root: &Path) -> Result<AppConfig> {
         init_config(workspace_root, false)?;
     }
 
-    let raw = fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let raw =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
     parse_config(&raw)
 }
 
