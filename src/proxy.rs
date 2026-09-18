@@ -1,6 +1,4 @@
-use std::collections::{HashMap, VecDeque};
-use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use http_body_util::BodyExt;
 use hudsucker::tokio_tungstenite::tungstenite::Message;
@@ -26,12 +24,24 @@ use crate::websocket::{
 
 const MAX_CAPTURE_BODY_BYTES: usize = 8 * 1024 * 1024;
 
-#[derive(Clone)]
 pub struct CaptureHandler {
     config: Arc<AppConfig>,
     store: Arc<RequestStore>,
-    pending: Arc<Mutex<HashMap<SocketAddr, VecDeque<QueueEntry>>>>,
+    pending: Option<QueueEntry>,
     ws_sessions: Arc<WebSocketSessionRegistry>,
+}
+
+impl Clone for CaptureHandler {
+    fn clone(&self) -> Self {
+        // Hudsucker clones the handler for each HTTP exchange and invokes the
+        // response callback on that same clone, so pending state starts empty.
+        Self {
+            config: Arc::clone(&self.config),
+            store: Arc::clone(&self.store),
+            pending: None,
+            ws_sessions: Arc::clone(&self.ws_sessions),
+        }
+    }
 }
 
 enum QueueEntry {
@@ -54,32 +64,22 @@ impl CaptureHandler {
         Self {
             config,
             store,
-            pending: Arc::new(Mutex::new(HashMap::new())),
+            pending: None,
             ws_sessions: Arc::new(WebSocketSessionRegistry::new()),
         }
     }
 
-    fn push_skip(&self, client_addr: SocketAddr) {
-        self.push_entry(client_addr, QueueEntry::Skipped);
+    fn set_skip(&mut self) {
+        self.set_pending(QueueEntry::Skipped);
     }
 
-    fn push_entry(&self, client_addr: SocketAddr, entry: QueueEntry) {
-        self.pending
-            .lock()
-            .expect("pending mutex poisoned")
-            .entry(client_addr)
-            .or_default()
-            .push_back(entry);
+    fn set_pending(&mut self, entry: QueueEntry) {
+        debug_assert!(self.pending.is_none());
+        self.pending = Some(entry);
     }
 
-    fn pop_entry(&self, client_addr: SocketAddr) -> Option<QueueEntry> {
-        let mut guard = self.pending.lock().expect("pending mutex poisoned");
-        let queue = guard.get_mut(&client_addr)?;
-        let entry = queue.pop_front()?;
-        if queue.is_empty() {
-            guard.remove(&client_addr);
-        }
-        Some(entry)
+    fn take_pending(&mut self) -> Option<QueueEntry> {
+        self.pending.take()
     }
 
     fn filter_input(
@@ -116,7 +116,7 @@ impl HttpHandler for CaptureHandler {
         }
 
         if is_browser_internal_request(&req) {
-            self.push_skip(ctx.client_addr);
+            self.set_skip();
             return req.into();
         }
 
@@ -126,7 +126,7 @@ impl HttpHandler for CaptureHandler {
         let url = match request_url_from_message(&req, is_ssl) {
             Some(url) => url,
             None => {
-                self.push_skip(ctx.client_addr);
+                self.set_skip();
                 return req.into();
             }
         };
@@ -136,7 +136,7 @@ impl HttpHandler for CaptureHandler {
             .or_else(|| (resource_type == "main_frame").then(|| url.clone()));
 
         if !matches_http_request_scope(page_url.as_deref(), &url, &self.config.scope) {
-            self.push_skip(ctx.client_addr);
+            self.set_skip();
             return req.into();
         }
 
@@ -152,7 +152,7 @@ impl HttpHandler for CaptureHandler {
             ),
             &self.config.filters,
         ) {
-            self.push_skip(ctx.client_addr);
+            self.set_skip();
             return req.into();
         }
 
@@ -161,13 +161,13 @@ impl HttpHandler for CaptureHandler {
             Ok(collected) => collected.to_bytes().to_vec(),
             Err(err) => {
                 warn!(%err, "skipping request capture due to body read failure");
-                self.push_skip(ctx.client_addr);
+                self.set_skip();
                 return Request::from_parts(parts, Body::empty()).into();
             }
         };
 
         if body_bytes.len() > MAX_CAPTURE_BODY_BYTES {
-            self.push_skip(ctx.client_addr);
+            self.set_skip();
             return Request::from_parts(parts, Body::from(body_bytes)).into();
         }
 
@@ -175,24 +175,21 @@ impl HttpHandler for CaptureHandler {
         let request_raw = serialize_request(&rebuilt, &body_bytes);
         let resolved_url = resolve_request_url(&request_raw).unwrap_or(url);
 
-        self.push_entry(
-            ctx.client_addr,
-            QueueEntry::Captured(PendingFlow {
-                request_sent_at: now_iso(),
-                request_raw,
-                request_body_bytes: body_bytes.len(),
-                page_url,
-                method: rebuilt.method().as_str().to_string(),
-                url: resolved_url,
-                resource_type,
-            }),
-        );
+        self.set_pending(QueueEntry::Captured(PendingFlow {
+            request_sent_at: now_iso(),
+            request_raw,
+            request_body_bytes: body_bytes.len(),
+            page_url,
+            method: rebuilt.method().as_str().to_string(),
+            url: resolved_url,
+            resource_type,
+        }));
 
         Request::from_parts(parts, Body::from(body_bytes)).into()
     }
 
-    async fn handle_response(&mut self, ctx: &HttpContext, res: Response<Body>) -> Response<Body> {
-        let Some(entry) = self.pop_entry(ctx.client_addr) else {
+    async fn handle_response(&mut self, _ctx: &HttpContext, res: Response<Body>) -> Response<Body> {
+        let Some(entry) = self.take_pending() else {
             return res;
         };
         let QueueEntry::Captured(flow) = entry else {
@@ -349,5 +346,56 @@ impl WebSocketHandler for CaptureHandler {
         }
 
         Some(message)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::HttpRequestFilterConfig;
+
+    fn pending_flow(url: &str) -> QueueEntry {
+        QueueEntry::Captured(PendingFlow {
+            request_sent_at: "2026-09-19T00:00:00Z".to_owned(),
+            request_raw: Vec::new(),
+            request_body_bytes: 0,
+            page_url: None,
+            method: "GET".to_owned(),
+            url: url.to_owned(),
+            resource_type: "script".to_owned(),
+        })
+    }
+
+    #[test]
+    fn cloned_handlers_keep_concurrent_flows_separate() {
+        let root =
+            std::env::temp_dir().join(format!("httplogger-handler-test-{}", std::process::id()));
+        let config = Arc::new(AppConfig {
+            scope: vec!["*".to_owned()],
+            mitm_proxy_port: 0,
+            user_agent: None,
+            filters: HttpRequestFilterConfig::default(),
+        });
+        let store = Arc::new(RequestStore::open(&root).unwrap());
+        let handler = CaptureHandler::new(config, store);
+        let mut first = handler.clone();
+        let mut second = handler.clone();
+
+        first.set_pending(pending_flow("https://example.test/first.js"));
+        second.set_pending(pending_flow("https://example.test/second.js"));
+
+        let QueueEntry::Captured(second_flow) = second.take_pending().unwrap() else {
+            panic!("second flow was skipped");
+        };
+        let QueueEntry::Captured(first_flow) = first.take_pending().unwrap() else {
+            panic!("first flow was skipped");
+        };
+        assert_eq!(second_flow.url, "https://example.test/second.js");
+        assert_eq!(first_flow.url, "https://example.test/first.js");
+
+        drop(handler);
+        drop(first);
+        drop(second);
+        let _ = std::fs::remove_dir_all(root);
     }
 }
